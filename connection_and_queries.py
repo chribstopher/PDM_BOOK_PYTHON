@@ -323,6 +323,84 @@ class Connection:
 
         print(f"Book '{book_name}' has been read from page {start_page} to page {end_page}.")
 
+    def follow(self, follower_id, email):
+        """
+        Adds a new row to the following table, where the follower follows the user identified by email.
+
+        Parameters:
+            follower_id (int): The user_id of the person doing the following.
+            email (str): The email of the user to be followed.
+
+        Returns:
+            bool: True if the follow operation was successful, False if the user with the provided email was not found.
+        """
+        try:
+            # Step 1: Find the user_id associated with the provided email
+            self.cursor.execute('SELECT user_id FROM user_email WHERE email = %s', (email,))
+            result = self.cursor.fetchone()
+
+            if result is None:
+                # No user found with the provided email
+                print(f"No user found with email {email}.")
+                return False
+
+            followee_id = result[0]
+
+            # Step 2: Insert the follower and followee relationship into the following table
+            self.cursor.execute(
+                'INSERT INTO following (follower, followee) VALUES (%s, %s)',
+                (follower_id, followee_id)
+            )
+
+            # Commit the transaction
+            self.connection.commit()
+            print(f"You are now following user with email {email}.")
+            return True
+
+        except Exception as e:
+            print(f"An error occurred while trying to follow: {e}")
+            self.connection.rollback()  # Roll back in case of an error
+            return False
+
+    def unfollow(self, follower_id, email):
+        """
+        Removes a row from the following table, where the follower stops following the user identified by email.
+
+        Parameters:
+            follower_id (int): The user_id of the person doing the unfollowing.
+            email (str): The email of the user to be unfollowed.
+
+        Returns:
+            bool: True if the unfollow operation was successful, False if the user with the provided email was not found.
+        """
+        try:
+            # Step 1: Find the user_id associated with the provided email
+            self.cursor.execute('SELECT user_id FROM user_email WHERE email = %s', (email,))
+            result = self.cursor.fetchone()
+
+            if result is None:
+                # No user found with the provided email
+                print(f"No user found with email {email}.")
+                return False
+
+            followee_id = result[0]
+
+            # Step 2: Delete the follower and followee relationship from the following table
+            self.cursor.execute(
+                'DELETE FROM following WHERE follower = %s AND followee = %s',
+                (follower_id, followee_id)
+            )
+
+            # Commit the transaction
+            self.connection.commit()
+            print(f"You have unfollowed user with email {email}.")
+            return True
+
+        except Exception as e:
+            print(f"An error occurred while trying to unfollow: {e}")
+            self.connection.rollback()  # Roll back in case of an error
+            return False
+
     def search_books(self, search_param, search_value):
         """
         Search for books based on specific parameters. It performs a SQL query on the database.
