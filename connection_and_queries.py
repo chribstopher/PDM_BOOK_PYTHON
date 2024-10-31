@@ -53,7 +53,7 @@ class Connection:
         Ensures the connection is properly closed when exiting a context.
         """
         self.close()
-        
+
     def join(self, username, email, password, firstname, lastname):
         """
         Registers a new user and adds their information to the "Users" table.
@@ -69,21 +69,39 @@ class Connection:
             tuple: User ID if registration is successful, None if user already exists.
         """
         formatted_date_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        self.cursor.execute('SELECT user_id FROM "users" WHERE username=%s OR email=%s', (username, email))
+
+        # Check if the username already exists
+        self.cursor.execute('SELECT user_id FROM "users" WHERE username=%s', (username,))
         user_id = self.cursor.fetchone()
         if user_id:
-            return None
+            return None  # User already exists
+
+        # Get the next user_id by finding the current max user_id
         self.cursor.execute('SELECT MAX(user_id) FROM users')
-        user_id = self.cursor.fetchone()[0]
-        # If max_id is None, this means the table is empty, so start from 1
-        user_id = 1 if user_id is None else user_id + 1
-        self.cursor.execute('INSERT INTO "users" (username, user_id, password, first_name, last_name, creation_date, last_access_date) VALUES (%s, %d, %s, %s, %s, %s, %s)', (username, user_id, password, firstname, lastname, formatted_date_time, formatted_date_time))
-        self.cursor.execute('INSERT INTO "user_email" (user_id, email) VALUES (%d, %s)', (user_id, email))
+        max_user_id = self.cursor.fetchone()[0]
+        user_id = 1 if max_user_id is None else max_user_id + 1
+
+        # Insert into the users table
+        print("Inserting into users table")
+        self.cursor.execute(
+            'INSERT INTO "users" (username, user_id, password, first_name, last_name, creation_date, last_access_date) VALUES (%s, %s, %s, %s, %s, %s, %s)',
+            (username, user_id, password, firstname, lastname, formatted_date_time, formatted_date_time)
+        )
+
+        # Insert into the user_email table
+        print("Inserting into user email table")
+        self.cursor.execute(
+            'INSERT INTO "user_email" (user_id, email) VALUES (%s, %s)',
+            (user_id, email)
+        )
+
+        # Commit the transaction
         self.connection.commit()
-        self.cursor.execute('SELECT user_id FROM "users" WHERE username=%s', username)
-        self.connection.commit()
+
+        # Retrieve and return the newly created user_id
+        self.cursor.execute('SELECT user_id FROM "users" WHERE username=%s', (username,))
         return self.cursor.fetchone()
-    
+
     def login(self, username, password):
         """
         Logs in a user and updates their last access date.
@@ -110,7 +128,11 @@ class Connection:
             user_id (int): User's ID.
             name (str): Name of the collection.
         """
-        self.cursor.execute('INSERT INTO "Collection" (name, user_id) VALUES (%s, %s)', (name, user_id))
+        # Get the next user_id by finding the current max user_id
+        self.cursor.execute('SELECT MAX(collection_id) FROM collection')
+        max_collection_id = self.cursor.fetchone()[0]
+        collection_id = 1 if max_collection_id is None else max_collection_id + 1
+        self.cursor.execute('INSERT INTO "collection" (collection_id, name, user_id) VALUES (%s, %s, %s)', (collection_id, name, user_id))
         self.connection.commit()
         return
         
@@ -185,7 +207,7 @@ class Connection:
             book_name (str): Title of the book to be removed from the collection.
             collection_name (str): Name of the collection from which to remove the book.
         """
-        self.cursor.execute('SELECT book_id FROM "Book" WHERE title=%s', [book_name])
+        self.cursor.execute('SELECT book_id FROM "book" WHERE title=%s', [book_name])
         book_id = self.cursor.fetchone()
         book_id = str(book_id[0])
         self.cursor.execute('SELECT collection_id FROM "collection" WHERE name=%s AND user_id=%s', (collection_name, user_id))
@@ -211,11 +233,11 @@ class Connection:
                 COUNT(p.book_id) AS "Number of Books",
                 SUM(b.length) AS "Length (Pages)"
             FROM
-                "Collection" c
+                "collection" c
             LEFT JOIN
                 part_of p ON c.collection_id = p.collection_id
             LEFT JOIN
-                "Book" b ON p.book_id = b.book_id
+                "book" b ON p.book_id = b.book_id
             WHERE
                 c.user_id = {uid}
             GROUP BY
@@ -237,35 +259,36 @@ class Connection:
             book_name (str): Title of the book to rate.
             rating (int): User's rating for the book.
         """
-        self.cursor.execute('SELECT book_id FROM "Book" WHERE title=%s', [book_name])
+        self.cursor.execute('SELECT book_id FROM "book" WHERE title=%s', [book_name])
         book_id = self.cursor.fetchone()
         book_id = str(book_id[0])
-        self.cursor.execute('INSERT INTO rates (book_id, user_id, stars) VALUES (%s, %s, %s)', (book_id, user_id, str(rating)))
+        self.cursor.execute('INSERT INTO rating (book_id, user_id, stars) VALUES (%s, %s, %s)', (book_id, user_id, str(rating)))
         self.connection.commit()
         return
     
-    def read_book(self, user_id, book_name, start_time, end_time, Pages_read):
+    def read_book(self, user_id, book_name, start_time, end_time, start_page, end_page):
         """
         Records a user's reading session by adding an entry to the "Session" table and associating the book with the session in the "has" table.
 
-        Parameters:
-            user_id (int): User's ID.
-            book_name (str): Title of the book to rate.
-            start_time (str): Start time of the reading session.
-            end_time (str): End time of the reading session.
-            
+
+
         """
-        self.cursor.execute('SELECT book_id FROM "Book" WHERE title=%s', [book_name])
+        self.cursor.execute('SELECT MAX(session_id) FROM reading_session')
+        max_session_id = self.cursor.fetchone()[0]
+        session_id = 1 if max_session_id is None else max_session_id + 1
+
+        Pages_read = end_page - start_page
+        self.cursor.execute('SELECT book_id FROM "book" WHERE title=%s', [book_name])
         book_id = self.cursor.fetchone()[0]
         book_id = str(book_id)
-        self.cursor.execute('INSERT INTO "Session" (user_id, start_time, end_time, start_page, end_page) VALUES (%s, %s, %s, %s, %s)', \
-            (user_id, start_time, end_time, str(Pages_read)))
+        self.cursor.execute('INSERT INTO "reading_session" (session_id, user_id, start_time, end_time, pages_read) VALUES (%s, %s, %s, %s, %s)', \
+            (session_id, user_id, start_time, end_time, str(Pages_read)))
         self.connection.commit()
-        self.cursor.execute('SELECT session_id FROM "Session" WHERE user_id=%s AND start_time=%s AND end_time=%s AND start_page=%s AND end_page=%s', \
+        self.cursor.execute('SELECT session_id FROM "reading_session" WHERE user_id=%s AND start_time=%s AND end_time=%s AND start_page=%s AND end_page=%s', \
             (user_id, start_time, end_time, str(Pages_read)))
         session_id = self.cursor.fetchone()[0]
         session_id = str(session_id)
-        self.cursor.execute('INSERT INTO has (book_id, session_id) VALUES (%s, %s)', (book_id, session_id))
+        self.cursor.execute('INSERT INTO book+session (book_id, session_id) VALUES (%s, %s)', (book_id, session_id))
         self.connection.commit()
         return
     

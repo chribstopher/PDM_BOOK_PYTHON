@@ -53,7 +53,7 @@ def main():
     The main function of the application. The entry point which handles user interaction and command processing.
     """
     ssh_username = input("SSH Username: ")
-    ssh_password = getpass("SSH Password: ")
+    ssh_password = input("SSH Password: ")
     try:
         session = Connection(ssh_username, ssh_password)
         user = User(session)
@@ -84,12 +84,12 @@ def main():
                 command = input("> ").lower()
             if command == "login":
                 username = input("Username: ")
-                password = hash_password(getpass("Password: "))
+                password = hash_password(input("Password: "))
                 print("Logging you in...")
                 user.login(username=username, password=password)
             elif command == "join":
                 username = input("Username: ")
-                password = hash_password(getpass("Password: "))
+                password = hash_password(input("Password: "))
                 email = input("Email: ")
                 first_name = input("First Name: ")
                 last_name = input("Last Name: ")
