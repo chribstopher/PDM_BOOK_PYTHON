@@ -69,19 +69,13 @@ class Connection:
             tuple: User ID if registration is successful, None if user already exists.
         """
         formatted_date_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        self.cursor.execute('SELECT user_id FROM "users" WHERE username=%s', (username))
+        self.cursor.execute('SELECT user_id FROM "users" WHERE username=%s OR email=%s', (username, email))
         user_id = self.cursor.fetchone()
         if user_id:
             return None
-        self.cursor.execute('SELECT MAX(user_id) FROM users')
-        user_id = self.cursor.fetchone()[0]
-        # If max_id is None, this means the table is empty, so start from 1
-        user_id = 1 if user_id is None else user_id + 1
-        self.cursor.execute('INSERT INTO "users" (username, user_id, password, first_name, last_name, creation_date, last_access_date) VALUES (%s, %s, %s, %s, %s, %s, %s)', (username, user_id, email, password, firstname, lastname, formatted_date_time, formatted_date_time))
-        self.cursor.execute('INSERT INTO "users" (user_id, email) VALUES (%s, %s)', (user_id, email))
+        self.cursor.execute('INSERT INTO "users" (username, email, password, first_name, last_name, creation_date, last_access_date) VALUES (%s, %s, %s, %s, %s, %s, %s)', (username, email, password, firstname, lastname, formatted_date_time, formatted_date_time))
         self.connection.commit()
-        self.cursor.execute('SELECT user_id FROM "users" WHERE username=%s', username)
-        self.connection.commit()
+        self.cursor.execute('SELECT user_id FROM "users" WHERE username=%s OR email=%s', (username, email))
         return self.cursor.fetchone()
     
     def login(self, username, password):
@@ -96,7 +90,6 @@ class Connection:
             tuple: User ID if login is successful, None if login fails.
         """
         formatted_date_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
         self.cursor.execute('SELECT user_id FROM "users" WHERE username=%s AND password=%s', (username, password))
         user_id = self.cursor.fetchone()
         self.cursor.execute('UPDATE "users" SET last_access_date=%s WHERE user_id=%s', (formatted_date_time, user_id))
@@ -126,14 +119,14 @@ class Connection:
         Raises:
             FileNotFoundError: If the collection does not exist.
         """
-        self.cursor.execute('SELECT * FROM "Collection" WHERE user_id=%s AND name=%s', (user_id, name))
+        self.cursor.execute('SELECT * FROM "collection" WHERE user_id=%s AND name=%s', (user_id, name))
         result = self.cursor.fetchone()
         if result is None:
             raise FileNotFoundError
-        self.cursor.execute('SELECT collection_id FROM "Collection" WHERE user_id=%s AND name=%s', (user_id, name))
+        self.cursor.execute('SELECT collection_id FROM "collection" WHERE user_id=%s AND name=%s', (user_id, name))
         collection_id = self.cursor.fetchone()
         self.cursor.execute('DELETE FROM part_of WHERE collection_id=%s', collection_id)
-        self.cursor.execute('DELETE FROM "Collection" WHERE user_id=%s AND name=%s', (user_id, name))
+        self.cursor.execute('DELETE FROM "collection" WHERE user_id=%s AND name=%s', (user_id, name))
         self.connection.commit()
         return
     
@@ -149,11 +142,11 @@ class Connection:
         Raises:
             FileNotFoundError: If the collection does not exist.
         """
-        self.cursor.execute('SELECT * FROM "Collection" WHERE user_id=%s AND name=%s', (user_id, old_name))
+        self.cursor.execute('SELECT * FROM "collection" WHERE user_id=%s AND name=%s', (user_id, old_name))
         result= self.cursor.fetchone()
         if result is None:
             raise FileNotFoundError
-        self.cursor.execute('UPDATE "Collection" SET name=%s WHERE user_id=%s AND name=%s', (new_name, user_id, old_name))
+        self.cursor.execute('UPDATE "collection" SET name=%s WHERE user_id=%s AND name=%s', (new_name, user_id, old_name))
         self.connection.commit()
         return
     
@@ -166,10 +159,10 @@ class Connection:
             book_name (str): Title of the book to be added.
             collection_name (str): Name of the collection to add the book to.
         """
-        self.cursor.execute('SELECT book_id FROM "Book" WHERE title=%s', [book_name])
+        self.cursor.execute('SELECT book_id FROM "book" WHERE title=%s', [book_name])
         book_id = self.cursor.fetchone()
         book_id = str(book_id[0])
-        self.cursor.execute('SELECT collection_id FROM "Collection" WHERE name=%s AND user_id=%s', (collection_name, user_id))
+        self.cursor.execute('SELECT collection_id FROM "collection" WHERE name=%s AND user_id=%s', (collection_name, user_id))
         collection_id = self.cursor.fetchone()
         if collection_id is None:
             return False
@@ -189,7 +182,7 @@ class Connection:
         self.cursor.execute('SELECT book_id FROM "Book" WHERE title=%s', [book_name])
         book_id = self.cursor.fetchone()
         book_id = str(book_id[0])
-        self.cursor.execute('SELECT collection_id FROM "Collection" WHERE name=%s AND user_id=%s', (collection_name, user_id))
+        self.cursor.execute('SELECT collection_id FROM "collection" WHERE name=%s AND user_id=%s', (collection_name, user_id))
         collection_id = self.cursor.fetchone()
         self.cursor.execute('DELETE FROM part_of WHERE book_id=%s AND collection_id=%s', (book_id, collection_id))
         self.connection.commit()
