@@ -69,13 +69,15 @@ class Connection:
             tuple: User ID if registration is successful, None if user already exists.
         """
         formatted_date_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        self.cursor.execute('SELECT user_id FROM "Users" WHERE username=%s OR email=%s', (username, email))
+        self.cursor.execute('SELECT user_id FROM "users" WHERE username=%s', (username))
         user_id = self.cursor.fetchone()
         if user_id:
             return None
-        self.cursor.execute('INSERT INTO "Users" (username, email, password, first_name, last_name, creation_date, last_access_date) VALUES (%s, %s, %s, %s, %s, %s, %s)', (username, email, password, firstname, lastname, formatted_date_time, formatted_date_time))
+        self.cursor.execute('INSERT INTO "users" (username, password, first_name, last_name, creation_date, last_access_date) VALUES (%s, %s, %s, %s, %s, %s, %s)', (username, email, password, firstname, lastname, formatted_date_time, formatted_date_time))
+        self.cursor.execute('INSERT INTO "users" (user_id, email) VALUES (%s, %s)', (user_id, email))
         self.connection.commit()
-        self.cursor.execute('SELECT user_id FROM "Users" WHERE username=%s OR email=%s', (username, email))
+        self.cursor.execute('SELECT user_id FROM "users" WHERE username=%s OR email=%s', (username, email))
+        self.connection.commit()
         return self.cursor.fetchone()
     
     def login(self, username, password):
@@ -90,9 +92,9 @@ class Connection:
             tuple: User ID if login is successful, None if login fails.
         """
         formatted_date_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        self.cursor.execute('SELECT user_id FROM "Users" WHERE username=%s AND password=%s', (username, password))
+        self.cursor.execute('SELECT user_id FROM "users" WHERE username=%s AND password=%s', (username, password))
         user_id = self.cursor.fetchone()
-        self.cursor.execute('UPDATE "Users" SET last_access_date=%s WHERE user_id=%s', (formatted_date_time, user_id))
+        self.cursor.execute('UPDATE "users" SET last_access_date=%s WHERE user_id=%s', (formatted_date_time, user_id))
         self.connection.commit()
         return user_id
     
