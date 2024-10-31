@@ -265,33 +265,64 @@ class Connection:
         self.cursor.execute('INSERT INTO rating (book_id, user_id, stars) VALUES (%s, %s, %s)', (book_id, user_id, str(rating)))
         self.connection.commit()
         return
-    
+
     def read_book(self, user_id, book_name, start_time, end_time, start_page, end_page):
         """
         Records a user's reading session by adding an entry to the "Session" table and associating the book with the session in the "has" table.
 
-
-
+        Parameters:
+            user_id (int): User's ID.
+            book_name (str): Title of the book to rate.
+            start_time (str): Start time of the reading session.
+            end_time (str): End time of the reading session.
+            start_page (int): The starting page number.
+            end_page (int): The ending page number.
         """
+        # Get the next session_id
         self.cursor.execute('SELECT MAX(session_id) FROM reading_session')
-        max_session_id = self.cursor.fetchone()[0]
-        session_id = 1 if max_session_id is None else max_session_id + 1
+        max_session_id_result = self.cursor.fetchone()
+        max_session_id = max_session_id_result[0] if max_session_id_result and max_session_id_result[
+            0] is not None else 0
+        session_id = max_session_id + 1
 
+        # Calculate pages read
         Pages_read = end_page - start_page
-        self.cursor.execute('SELECT book_id FROM "book" WHERE title=%s', [book_name])
-        book_id = self.cursor.fetchone()[0]
-        book_id = str(book_id)
-        self.cursor.execute('INSERT INTO "reading_session" (session_id, user_id, start_time, end_time, pages_read) VALUES (%s, %s, %s, %s, %s)', \
-            (session_id, user_id, start_time, end_time, str(Pages_read)))
+
+        # Get the book_id for the specified book name
+        self.cursor.execute('SELECT book_id FROM "book" WHERE title=%s', (book_name,))
+        book_id_result = self.cursor.fetchone()
+        if not book_id_result:
+            print(f"Error: Book '{book_name}' not found in the database.")
+            return
+        book_id = book_id_result[0]
+
+        # Insert into reading_session table
+        self.cursor.execute(
+            'INSERT INTO reading_session (session_id, user_id, start_time, end_time, pages_read) VALUES (%s, %s, %s, %s, %s)',
+            (session_id, user_id, start_time, end_time, Pages_read)
+        )
         self.connection.commit()
-        self.cursor.execute('SELECT session_id FROM "reading_session" WHERE user_id=%s AND start_time=%s AND end_time=%s AND start_page=%s AND end_page=%s', \
-            (user_id, start_time, end_time, str(Pages_read)))
-        session_id = self.cursor.fetchone()[0]
-        session_id = str(session_id)
-        self.cursor.execute('INSERT INTO book+session (book_id, session_id) VALUES (%s, %s)', (book_id, session_id))
+
+        # Verify the session was created and fetch the session_id
+        self.cursor.execute(
+            'SELECT session_id FROM reading_session WHERE user_id=%s AND start_time=%s AND end_time=%s AND pages_read=%s',
+            (user_id, start_time, end_time, Pages_read)
+        )
+        session_id_result = self.cursor.fetchone()
+        if not session_id_result:
+            print("Error: Unable to retrieve session_id after insertion.")
+            return
+        session_id = session_id_result[0]
+
+        # Insert into book+session table (associative table for book and session relationship)
+        self.cursor.execute(
+            'INSERT INTO "book+session" (book_id, session_id) VALUES (%s, %s)',
+            (book_id, session_id)
+        )
         self.connection.commit()
-        return
-    
+
+        print(f"Book '{book_name}' has been read from page {start_page} to page {end_page}.")
+
     def search_books(self, search_param, search_value):
         """
         Search for books based on specific parameters. It performs a SQL query on the database.
@@ -303,34 +334,36 @@ class Connection:
         Returns:
             list of tuples: List of books that match the search criteria.
         """
+
+        # "book".number_of_books,
         sql_query = """
-        SELECT "Book".book_id, "Book".title,
-        "Book".number_of_books, "Book".length,
+        SELECT "book".book_id, "book".title,
+        "book".length,
         W.first_name AS writer_first_name, W.last_name AS writer_last_name,
         P.first_name AS publisher_first_name, P.last_name AS publisher_last_name,
         E.first_name AS editor_first_name, E.last_name AS editor_last_name,
         A.type AS audience_type, G.type AS genre_type,
         edition.release_date,
-        rates.stars AS rating
-        FROM "Book"
-        LEFT JOIN writes ON "Book".book_id = writes.book_id
-        LEFT JOIN "Contributor" AS W ON writes.contributor_id = W.contributor_id
-        LEFT JOIN publishes ON "Book".book_id = publishes.book_id
-        LEFT JOIN "Contributor" AS P ON publishes.contributor_id = P.contributor_id
-        LEFT JOIN edits ON "Book".book_id = edits.book_id
-        LEFT JOIN "Contributor" AS E ON edits.contributor_id = E.contributor_id
-        LEFT JOIN enjoys ON "Book".book_id = enjoys.book_id
-        LEFT JOIN "Audience" AS A ON enjoys.audience_id = A.audience_id
-        LEFT JOIN classifies_as ON "Book".book_id = classifies_as.book_id
-        LEFT JOIN "Genre" AS G ON classifies_as.genre_id = G.genre_id
-        LEFT JOIN edition ON "Book".book_id = edition.book_id
-        LEFT JOIN rates on "Book".book_id = rates.book_id
+        rating.stars AS rating
+        FROM "book"
+        LEFT JOIN writes ON "book".book_id = writes.book_id
+        LEFT JOIN "contributor" AS W ON writes.contributor_id = W.contributor_id
+        LEFT JOIN publishes ON "book".book_id = publishes.book_id
+        LEFT JOIN "contributor" AS P ON publishes.contributor_id = P.contributor_id
+        LEFT JOIN edits ON "book".book_id = edits.book_id
+        LEFT JOIN "contributor" AS E ON edits.contributor_id = E.contributor_id
+        LEFT JOIN enjoys ON "book".book_id = enjoys.book_id
+        LEFT JOIN "audience" AS A ON enjoys.audience_id = A.audience_id
+        LEFT JOIN classifies_as ON "book".book_id = classifies_as.book_id
+        LEFT JOIN "genre" AS G ON classifies_as.genre_id = G.genre_id
+        LEFT JOIN edition ON "book".book_id = edition.book_id
+        LEFT JOIN rating on "book".book_id = rating.book_id
         """
         
-        order_by = 'ORDER BY "Book".title, edition.release_date;'
+        order_by = 'ORDER BY "book".title, edition.release_date;'
         where_clause = ""
         if search_param == "title":
-            where_clause = 'WHERE "Book".title= \'' + search_value + '\''
+            where_clause = 'WHERE "book".title= \'' + search_value + '\''
         elif search_param == "genre":
             where_clause = 'WHERE G.type= \'' + search_value + '\''
         elif search_param == "date":
@@ -358,32 +391,32 @@ class Connection:
             list of tuples: List of books that match the search and sorting criteria.
         """
         sql_query = """
-        SELECT "Book".book_id, "Book".title,
-        "Book".number_of_books, "Book".length,
+        SELECT "book".book_id, "book".title,
+        "book".length,
         W.first_name AS writer_first_name, W.last_name AS writer_last_name,
         P.first_name AS publisher_first_name, P.last_name AS publisher_last_name,
         E.first_name AS editor_first_name, E.last_name AS editor_last_name,
         A.type AS audience_type, G.type AS genre_type,
         edition.release_date,
-        rates.stars AS rating
-        FROM "Book"
-        LEFT JOIN "writes" ON "Book".book_id = writes.book_id
-        LEFT JOIN "Contributor" AS W ON writes.contributor_id = W.contributor_id
-        LEFT JOIN publishes ON "Book".book_id = Publishes.book_id
-        LEFT JOIN "Contributor" AS P ON publishes.contributor_id = P.contributor_id
-        LEFT JOIN edits ON "Book".book_id = edits.book_id
-        LEFT JOIN "Contributor" AS E ON edits.contributor_id = E.contributor_id
-        LEFT JOIN enjoys ON "Book".book_id = enjoys.book_id
-        LEFT JOIN "Audience" AS A ON enjoys.audience_id = A.audience_id
-        LEFT JOIN classifies_as ON "Book".book_id = classifies_as.book_id
-        LEFT JOIN "Genre" AS G ON classifies_as.genre_id = G.genre_id
-        LEFT JOIN edition ON "Book".book_id = edition.book_id
-        LEFT JOIN rates on "Book".book_id = rates.book_id
+        rating.stars AS rating
+        FROM "book"
+        LEFT JOIN "writes" ON "book".book_id = writes.book_id
+        LEFT JOIN "contributor" AS W ON writes.contributor_id = W.contributor_id
+        LEFT JOIN publishes ON "book".book_id = Publishes.book_id
+        LEFT JOIN "contributor" AS P ON publishes.contributor_id = P.contributor_id
+        LEFT JOIN edits ON "book".book_id = edits.book_id
+        LEFT JOIN "contributor" AS E ON edits.contributor_id = E.contributor_id
+        LEFT JOIN enjoys ON "book".book_id = enjoys.book_id
+        LEFT JOIN "audience" AS A ON enjoys.audience_id = A.audience_id
+        LEFT JOIN classifies_as ON "book".book_id = classifies_as.book_id
+        LEFT JOIN "genre" AS G ON classifies_as.genre_id = G.genre_id
+        LEFT JOIN edition ON "book".book_id = edition.book_id
+        LEFT JOIN rating on "book".book_id = rating.book_id
         """
 
         where_clause = ""
         if search_param == "title":
-            where_clause = 'WHERE "Book".title=\'' + search_value + '\''
+            where_clause = 'WHERE "book".title=\'' + search_value + '\''
         elif search_param == "genre":
             where_clause = 'WHERE G.type=\'' + search_value + '\''
         elif search_param == "date":
@@ -399,7 +432,7 @@ class Connection:
         if sort_order == "desc" or sort_order == "DESC":
             sort_by = 'DESC'
         if sort_by == "title":
-            order_by_clause = 'ORDER BY "Book".title' + sort_by
+            order_by_clause = 'ORDER BY "book".title' + sort_by
         elif sort_by == "publisher":
             order_by_clause = 'ORDER BY P.first_name, P.last_name' + sort_by
         elif sort_by == "genre":
