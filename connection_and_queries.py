@@ -454,10 +454,10 @@ class Connection:
             where_clause= 'WHERE P.first_name=\'' + first_name + '\' AND P.last_name=\'' + last_name + '\''
         self.cursor.execute(sql_query + where_clause + order_by)
         return self.cursor.fetchall()
-    
+
     def sort_books(self, search_param, search_value, sort_by, sort_order):
         """
-        Sorts and filters books on specific parameters.
+        Sorts and filters books on specific parameters, with support for multiple editions.
 
         Parameters:
             search_param (str): Search parameter (e.g., title, genre, date, author, publisher).
@@ -470,52 +470,79 @@ class Connection:
         """
         sql_query = """
         SELECT "book".book_id, "book".title,
-        "book".length,
-        W.first_name AS writer_first_name, W.last_name AS writer_last_name,
-        P.first_name AS publisher_first_name, P.last_name AS publisher_last_name,
-        E.first_name AS editor_first_name, E.last_name AS editor_last_name,
-        A.type AS audience_type, G.type AS genre_type,
-        edition.release_date,
-        rating.stars AS rating
+               "book".length,
+               W.writer_names AS writer_names,  -- Aggregated writer names
+               P.first_name AS publisher_first_name, P.last_name AS publisher_last_name,
+               E.first_name AS editor_first_name, E.last_name AS editor_last_name,
+               A.audience_type, G.genre_type,
+               edition.release_date,
+               rating.stars AS rating
         FROM "book"
-        LEFT JOIN "writes" ON "book".book_id = writes.book_id
-        LEFT JOIN "contributor" AS W ON writes.contributor_id = W.contributor_id
-        LEFT JOIN publishes ON "book".book_id = Publishes.book_id
-        LEFT JOIN "contributor" AS P ON publishes.contributor_id = P.contributor_id
-        LEFT JOIN edits ON "book".book_id = edits.book_id
-        LEFT JOIN "contributor" AS E ON edits.contributor_id = E.contributor_id
-        LEFT JOIN enjoys ON "book".book_id = enjoys.book_id
-        LEFT JOIN "audience" AS A ON enjoys.audience_id = A.audience_id
-        LEFT JOIN classifies_as ON "book".book_id = classifies_as.book_id
-        LEFT JOIN "genre" AS G ON classifies_as.genre_id = G.genre_id
-        LEFT JOIN edition ON "book".book_id = edition.book_id
-        LEFT JOIN rating on "book".book_id = rating.book_id
+        LEFT JOIN (
+            SELECT writes.book_id, array_agg(C.first_name || ' ' || C.last_name) AS writer_names
+            FROM "writes"
+            JOIN "contributor" AS C ON writes.contributor_id = C.contributor_id
+            GROUP BY writes.book_id
+        ) AS W ON "book".book_id = W.book_id
+        LEFT JOIN (
+            SELECT publishes.book_id, C.first_name, C.last_name
+            FROM "publishes"
+            JOIN "contributor" AS C ON publishes.contributor_id = C.contributor_id
+            GROUP BY publishes.book_id, C.first_name, C.last_name
+        ) AS P ON "book".book_id = P.book_id
+        LEFT JOIN (
+            SELECT edits.book_id, C.first_name, C.last_name
+            FROM "edits"
+            JOIN "contributor" AS C ON edits.contributor_id = C.contributor_id
+            GROUP BY edits.book_id, C.first_name, C.last_name
+        ) AS E ON "book".book_id = E.book_id
+        LEFT JOIN (
+            SELECT enjoys.book_id, array_agg(A.type) AS audience_type
+            FROM "enjoys"
+            JOIN "audience" AS A ON enjoys.audience_id = A.audience_id
+            GROUP BY enjoys.book_id
+        ) AS A ON "book".book_id = A.book_id
+        LEFT JOIN (
+            SELECT classifies_as.book_id, array_agg(G.type) AS genre_type
+            FROM "classifies_as"
+            JOIN "genre" AS G ON classifies_as.genre_id = G.genre_id
+            GROUP BY classifies_as.book_id
+        ) AS G ON "book".book_id = G.book_id
+        LEFT JOIN "edition" ON "book".book_id = edition.book_id
+        LEFT JOIN "rating" ON "book".book_id = rating.book_id
         """
 
+        # Construct the WHERE clause based on search parameters
         where_clause = ""
         if search_param == "title":
-            where_clause = 'WHERE "book".title=\'' + search_value + '\''
+            where_clause = f"WHERE book.title = '{search_value}'"
         elif search_param == "genre":
-            where_clause = 'WHERE G.type=\'' + search_value + '\''
+            where_clause = f"WHERE '{search_value}' = ANY(G.genre_type)"
         elif search_param == "date":
-            where_clause = 'WHERE edition.release_date=\'' + search_value + '\''
+            where_clause = f"WHERE edition.release_date = '{search_value}'"
         elif search_param == "author":
             first_name, last_name = search_value.split(" ")
-            where_clause = 'WHERE W.first_name=\'' + first_name + '\'' + ' AND W.last_name=\'' + last_name + '\''
+            where_clause = f"WHERE '{first_name} {last_name}' = ANY(W.writer_names)"
         elif search_param == "publisher":
-            first_name, last_name = search_value.split(" ")
-            where_clause = 'WHERE P.first_name=\'' + first_name + '\'' + ' AND P.last_name=\'' + last_name + '\''
+            where_clause = f"WHERE P.first_name = '{first_name}' AND P.last_name = '{last_name}'"
+
+        # Construct the ORDER BY clause
+        if sort_order.lower() == "desc":
+            sort_order = "DESC"
+        else:
+            sort_order = "ASC"
+
         order_by_clause = ""
-        sort_by = ""
-        if sort_order == "desc" or sort_order == "DESC":
-            sort_by = 'DESC'
         if sort_by == "title":
-            order_by_clause = 'ORDER BY "book".title' + sort_by
+            order_by_clause = f"ORDER BY book.title {sort_order}"
         elif sort_by == "publisher":
-            order_by_clause = 'ORDER BY P.first_name, P.last_name' + sort_by
+            order_by_clause = f"ORDER BY P.first_name {sort_order}, P.last_name {sort_order}"
         elif sort_by == "genre":
-            order_by_clause = 'ORDER BY G.type' + sort_by
+            order_by_clause = f"ORDER BY G.genre_type {sort_order}"
         elif sort_by == "release_year":
-            order_by_clause = 'ORDER BY edition.release_date' + sort_by
-        self.cursor.execute(sql_query + where_clause + order_by_clause)
+            order_by_clause = f"ORDER BY edition.release_date {sort_order}"
+
+        # Final SQL execution
+        sql_query += " " + where_clause + " " + order_by_clause
+        self.cursor.execute(sql_query)
         return self.cursor.fetchall()
