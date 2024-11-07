@@ -29,6 +29,7 @@ def help():
     print("delete     -- Deletes an existing book collection")
     print("rate       -- Rates a book (1-5 stars)")
     print("read       -- Reads a book from a certain page to a certain page")
+    print("user info  -- Check follow and collection info")
     print("follow     -- Follows another user (by email)")
     print("unfollow   -- Unfollows another user (by email)")
     print("search     -- Searches a book based on a search term and a search value")
@@ -132,6 +133,8 @@ def main():
                 book_end_page = int(input("End page: "))
                 print("Reading the book...")
                 user.read_book(book_title, book_start_page, book_end_page)
+            elif command == "profile":
+                user.profile()
             elif command == "follow":
                 email = input("Please enter the email of the person to follow: ")
                 user.follow(email)

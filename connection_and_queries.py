@@ -248,7 +248,36 @@ class Connection:
         
         self.cursor.execute(collection_sql_stmnt)
         return self.cursor.fetchall()
-    
+
+    def collection_info(self, user_id):
+        """
+        Retrieves the count of collections created by a specified user.
+
+        Parameters:
+            user_id (int): The ID of the user for whom the collection count is requested.
+
+        Returns:
+            int: The number of collections created by the user, or None if an error occurs.
+        """
+        try:
+            # SQL query to count the number of collections by the specified user
+            collection_count_query = """
+                SELECT COUNT(*) 
+                FROM collection
+                WHERE user_id = %s;
+            """
+
+            # Execute the query
+            self.cursor.execute(collection_count_query, (user_id,))
+            collection_count = self.cursor.fetchone()[0]
+
+            # Return the collection count
+            return collection_count
+
+        except Exception as e:
+            print(f"An error occurred while retrieving collection info: {e}")
+            self.connection.rollback()
+            return None
 
     def rate_a_book(self, user_id, book_name, rating):
         """
@@ -265,6 +294,39 @@ class Connection:
         self.cursor.execute('INSERT INTO rating (book_id, user_id, stars) VALUES (%s, %s, %s)', (book_id, user_id, str(rating)))
         self.connection.commit()
         return
+
+    def top_rated_books(self, user_id):
+        """
+        Retrieves the top 10 books rated by a specific user, ordered by rating and title.
+
+        Parameters:
+            user_id (int): The ID of the user.
+
+        Returns:
+            list of tuples: A list of the top 10 books with their titles and ratings.
+        """
+        try:
+            # SQL query to get the top 10 books rated by the user
+            query = """
+                SELECT b.title, r.stars
+                FROM rating AS r
+                JOIN book AS b ON r.book_id = b.book_id
+                WHERE r.user_id = %s
+                ORDER BY r.stars DESC, b.title ASC
+                LIMIT 10;
+            """
+
+            # Execute the query
+            self.cursor.execute(query, (user_id,))
+            top_books = self.cursor.fetchall()
+
+            # Return the result
+            return top_books
+
+        except Exception as e:
+            print(f"An error occurred while retrieving top rated books: {e}")
+            self.connection.rollback()
+            return None
 
     def read_book(self, user_id, book_name, start_time, end_time, start_page, end_page):
         """
@@ -400,6 +462,46 @@ class Connection:
             print(f"An error occurred while trying to unfollow: {e}")
             self.connection.rollback()  # Roll back in case of an error
             return False
+
+    def follower_info(self, user_id):
+        """
+        Retrieves follower information for a specified user.
+
+        Parameters:
+            user_id (int): The ID of the user for whom follower information is requested.
+
+        Returns:
+            tuple: (following_count, followers_count) or None if an error occurs.
+        """
+        try:
+            # SQL to count users this user is following
+            following_count_query = """
+                SELECT COUNT(*) 
+                FROM following
+                WHERE follower = %s;
+            """
+
+            # SQL to count users following this user
+            followers_count_query = """
+                SELECT COUNT(*) 
+                FROM following
+                WHERE followee = %s;
+            """
+
+            # Execute queries
+            self.cursor.execute(following_count_query, (user_id,))
+            following_count = self.cursor.fetchone()[0]
+
+            self.cursor.execute(followers_count_query, (user_id,))
+            followers_count = self.cursor.fetchone()[0]
+
+            # Return the counts as a tuple
+            return following_count, followers_count
+
+        except Exception as e:
+            print(f"An error occurred while retrieving follower info: {e}")
+            self.connection.rollback()
+            return None
 
     def search_books(self, search_param, search_value):
         """

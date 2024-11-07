@@ -77,7 +77,44 @@ class User:
             print("Logged out successfully.")
         else:
             print("You are not logged in.")
-            
+
+    def profile(self):
+        """
+        Displays a user's profile information, including:
+          - Number of collections the user has
+          - Number of users followed by this user
+          - Number of users following this user
+          - Top 10 books rated by the user
+        """
+        if self.username is None:
+            print("Please log in to view profile information.")
+            return
+
+        # Retrieve the number of collections
+        collection_count = self.connection.collection_info(self.user_id)
+        if collection_count is not None:
+            print(f"Number of collections: {collection_count}")
+        else:
+            print("Failed to retrieve collection information.")
+
+        # Retrieve follower and following counts
+        follower_info = self.connection.follower_info(self.user_id)
+        if follower_info is not None:
+            following_count, followers_count = follower_info
+            print(f"Number of users followed: {following_count}")
+            print(f"Number of users following: {followers_count}")
+        else:
+            print("Failed to retrieve follower information.")
+
+        # Retrieve top 10 rated books
+        top_books = self.connection.top_rated_books(self.user_id)
+        if top_books is not None:
+            print("Top 10 Rated Books:")
+            for title, stars in top_books:
+                print(f"{title}: {stars} stars")
+        else:
+            print("Failed to retrieve top-rated books.")
+
     def create_collection(self, title):
         """
         Creates a new book collection for the user.
@@ -215,6 +252,17 @@ class User:
         if result:
              print(f'"{self.username}" unfollowed {email} successfully :(')
 
+    def follower_info(self):
+        if self.username is None:
+            print("Please log in to view following info.")
+            return
+        result = self.connection.follower_info(self.user_id)
+        if result:
+            following_count, followers_count = result
+            print(f"Following Count: {following_count}, Followers Count: {followers_count}")
+        else:
+            print("Failed to retrieve follower information.")
+
     def list_collections(self):
         """
         Lists all book collections associated with the user.
@@ -226,7 +274,35 @@ class User:
         self.collections = self.connection.get_collections(self.user_id)
         for collection in self.collections:
             print(f"{str(collection)}\n")
-            
+
+    def collection_info(self):
+        if self.username is None:
+            print("Please log in to view collection info")
+            return
+        result = self.connection.collection_info(self.user_id)
+        if result is not None:
+            print(f"Number of collections: {result}")
+        else:
+            print("Failed to retrieve collection information.")
+
+    def top_rated_books(self):
+        """
+        Displays the top 10 books rated by the user, ordered by rating and title.
+        """
+        if self.username is None:
+            print("Please log in to view your top-rated books.")
+            return
+
+        # Call the function in connection.py
+        result = self.connection.top_rated_books(self.user_id)
+
+        if result:
+            print("Your Top 10 Rated Books:")
+            for title, stars in result:
+                print(f"{title}: {stars} stars")
+        else:
+            print("Failed to retrieve your top-rated books.")
+
     def search(self, search_term, search_value):
         """
         Searches for books based on a seach term and value.
