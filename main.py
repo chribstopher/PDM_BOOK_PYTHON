@@ -29,7 +29,7 @@ def help():
     print("delete     -- Deletes an existing book collection")
     print("rate       -- Rates a book (1-5 stars)")
     print("read       -- Reads a book from a certain page to a certain page")
-    print("user info  -- Check follow and collection info")
+    print("profile  -- Check follow and collection info")
     print("follow     -- Follows another user (by email)")
     print("unfollow   -- Unfollows another user (by email)")
     print("search     -- Searches a book based on a search term and a search value")
