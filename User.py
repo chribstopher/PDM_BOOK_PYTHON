@@ -330,3 +330,69 @@ class User:
         search_results = self.connection.sort_books(search_term, search_value, order_value, order_by)
         for result in search_results:
             print(f"{result}")
+
+    def top20(self):
+        """
+        Displays top 20 most popular books from the last 90 days
+        """
+        if self.username is None:
+            return
+        print("Top 20 most popular books in last 90 days:")
+        popular = self.connection.top20()
+        for i, book in enumerate(popular, start=1):
+            print(f"{i}. {book[0]}")
+
+    def follower20(self):
+        """
+        Displays the top 20 most popular books read by the user's followers.
+        """
+        if self.username is None:
+            print("Please log in to view the top 20 books among your followers.")
+            return
+
+        print("Top 20 most popular books among your followers:")
+        popular = self.connection.follower20(self.user_id)
+        if not popular:
+            print("No popular books found among your followers or an error occurred.")
+            return
+
+        for i, (title, avg_rating, five_star_count) in enumerate(popular, start=1):
+            print(f"{i}. {title} - Average Rating: {avg_rating:.2f}, 5-Star Ratings: {five_star_count}")
+
+    def top5new(self):
+        """
+        Displays the top 5 new releases of the month, sorted by average rating and 5-star counts.
+        """
+        if self.username is None:
+            print("Please log in to view the top 5 new releases of the month.")
+            return
+
+        # Call the top5new function in connection.py
+        popular = self.connection.top5new()
+
+        if not popular:
+            print("No new releases in the last month or an error occurred.")
+            return
+
+        # Display the top 5 books
+        print("Top 5 releases of the month:")
+        for i, (title, avg_rating, five_star_count) in enumerate(popular, start=1):
+            print(f"{i}. {title} - Average Rating: {avg_rating:.2f}, 5-Star Ratings: {five_star_count}")
+
+    def recommended(self):
+        """
+        Displays book recommendations for the user based on their preferences.
+        """
+        if self.username is None:
+            print("Please log in to see recommendations for you.")
+            return
+
+        recommendations = self.connection.recommendations(self.user_id)
+
+        if not recommendations:
+            print("No recommendations found or an error occurred.")
+            return
+
+        print("Recommendations for you:")
+        for i, (title, author_first_name, author_last_name, avg_rating) in enumerate(recommendations, start=1):
+            print(f"{i}. {title} - Author: {author_first_name} {author_last_name} - Average Rating: {avg_rating:.2f}")

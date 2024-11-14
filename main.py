@@ -29,11 +29,15 @@ def help():
     print("delete     -- Deletes an existing book collection")
     print("rate       -- Rates a book (1-5 stars)")
     print("read       -- Reads a book from a certain page to a certain page")
-    print("profile  -- Check follow and collection info")
+    print("profile    -- Check follow and collection info")
     print("follow     -- Follows another user (by email)")
     print("unfollow   -- Unfollows another user (by email)")
     print("search     -- Searches a book based on a search term and a search value")
     print("sort       -- Sorts and searches books")
+    print("top20      -- Top 20 most popular books in last 90 days (rolling)")
+    print("follower20 -- Top 20 most popular books among my followers")
+    print("top5new    -- Top 5 new releases of the month (calendar month)")
+    print("rec        -- Gives book recommendations based on user reading history")
     print("help       -- Shows a help message")
     print("quit       -- Exits the application")
 
@@ -153,6 +157,14 @@ def main():
                 order_value = input("Please enter the order term[title/publisher/genre/released year]: ")
                 order_by = input("Please enter the sort order[asc/desc]: ").lower()
                 user.sort(search_term, search_value, order_value, order_by)
+            elif command == 'top20':
+                user.top20()
+            elif command == 'follower20':
+                user.follower20()
+            elif command == "top5new":
+                user.top5new()
+            elif command == "rec":
+                user.recommended()
             elif command == "help":
                 help()
             elif command == "quit":

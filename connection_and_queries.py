@@ -648,3 +648,199 @@ class Connection:
         sql_query += " " + where_clause + " " + order_by_clause
         self.cursor.execute(sql_query)
         return self.cursor.fetchall()
+
+    def top20(self):
+        """
+        Retrieves the top 20 most popular books in the last 90 days based on average ratings and 5-star counts.
+
+        Returns:
+            list of tuples: A list of the top 20 books with their titles, average ratings, and 5-star counts.
+        """
+        try:
+            # SQL query to find the top 20 most popular books in the last 90 days
+            query = """
+            WITH recent_sessions AS (
+                SELECT DISTINCT book_id
+                FROM "book+session" bs
+                JOIN reading_session rs ON bs.session_id = rs.session_id
+                WHERE rs.start_time >= NOW() - INTERVAL '90 days'
+            ),
+            book_ratings AS (
+                SELECT r.book_id,
+                       AVG(r.stars) AS avg_rating,
+                       COUNT(CASE WHEN r.stars = 5 THEN 1 END) AS five_star_count
+                FROM rating r
+                JOIN recent_sessions rs ON r.book_id = rs.book_id
+                GROUP BY r.book_id
+            )
+            SELECT b.title, br.avg_rating, br.five_star_count
+            FROM book_ratings br
+            JOIN book b ON br.book_id = b.book_id
+            ORDER BY br.avg_rating DESC, br.five_star_count DESC
+            LIMIT 20;
+            """
+
+            # Execute the query
+            self.cursor.execute(query)
+            popular_books = self.cursor.fetchall()
+
+            # Return the result
+            return popular_books
+
+        except Exception as e:
+            print(f"An error occurred while retrieving the top 20 most popular books: {e}")
+            self.connection.rollback()
+            return None
+
+    def follower20(self, user_id):
+        """
+        Retrieves the top 20 most popular books read by the user's followers, based on average ratings and 5-star counts.
+
+        Parameters:
+            user_id (int): The ID of the user whose followers' data is being queried.
+
+        Returns:
+            list of tuples: A list of the top 20 books with their titles, average ratings, and 5-star counts.
+        """
+        try:
+            # SQL query to find the top 20 most popular books read by followers
+            query = """
+            WITH followers_sessions AS (
+                SELECT DISTINCT bs.book_id
+                FROM following f
+                JOIN reading_session rs ON f.follower = rs.user_id
+                JOIN "book+session" bs ON rs.session_id = bs.session_id
+                WHERE f.followee = %s
+            ),
+            book_ratings AS (
+                SELECT r.book_id,
+                       AVG(r.stars) AS avg_rating,
+                       COUNT(CASE WHEN r.stars = 5 THEN 1 END) AS five_star_count
+                FROM rating r
+                JOIN followers_sessions fs ON r.book_id = fs.book_id
+                GROUP BY r.book_id
+            )
+            SELECT b.title, br.avg_rating, br.five_star_count
+            FROM book_ratings br
+            JOIN book b ON br.book_id = b.book_id
+            ORDER BY br.avg_rating DESC, br.five_star_count DESC
+            LIMIT 20;
+            """
+
+            # Execute the query with the provided user ID
+            self.cursor.execute(query, (user_id,))
+            popular_books = self.cursor.fetchall()
+
+            # Return the result
+            return popular_books
+
+        except Exception as e:
+            print(f"An error occurred while retrieving the top 20 books read by followers: {e}")
+            self.connection.rollback()
+            return None
+
+    def top5new(self):
+        """
+        Retrieves the top 5 books released within the last month, based on average ratings and 5-star counts.
+
+        Returns:
+            list of tuples: A list of the top 5 books with their titles, average ratings, and 5-star counts.
+        """
+        try:
+            # SQL query to find the top 5 new books released within the last month
+            query = """
+            WITH recent_editions AS (
+                SELECT DISTINCT e.book_id
+                FROM edition e
+                WHERE e.release_date >= NOW() - INTERVAL '1 month'
+            ),
+            book_ratings AS (
+                SELECT r.book_id,
+                       AVG(r.stars) AS avg_rating,
+                       COUNT(CASE WHEN r.stars = 5 THEN 1 END) AS five_star_count
+                FROM rating r
+                JOIN recent_editions re ON r.book_id = re.book_id
+                GROUP BY r.book_id
+            )
+            SELECT b.title, br.avg_rating, br.five_star_count
+            FROM book_ratings br
+            JOIN book b ON br.book_id = b.book_id
+            ORDER BY br.avg_rating DESC, br.five_star_count DESC
+            LIMIT 5;
+            """
+
+            # Execute the query
+            self.cursor.execute(query)
+            top_books = self.cursor.fetchall()
+
+            # Return the result
+            return top_books
+
+        except Exception as e:
+            print(f"An error occurred while retrieving the top 5 new releases: {e}")
+            self.connection.rollback()
+            return None
+
+    def recommendations(self, user_id):
+        """
+        Provides book recommendations for a user based on their reading preferences.
+
+        Parameters:
+            user_id (int): The ID of the user requesting recommendations.
+
+        Returns:
+            list of tuples: Recommended books with their title, author, and average rating.
+        """
+        try:
+            # SQL query to find the recommendations
+            query = """
+            WITH user_books AS (
+                SELECT DISTINCT bs.book_id
+                FROM reading_session rs
+                JOIN "book+session" bs ON rs.session_id = bs.session_id
+                WHERE rs.user_id = %s
+            ),
+            user_genres AS (
+                SELECT ca.genre_id, COUNT(ca.genre_id) AS genre_count
+                FROM classifies_as ca
+                JOIN user_books ub ON ca.book_id = ub.book_id
+                GROUP BY ca.genre_id
+                ORDER BY genre_count DESC
+                LIMIT 2
+            ),
+            top_books AS (
+                SELECT DISTINCT ON (b.title) r.book_id,
+                       b.title,
+                       AVG(r.stars) AS avg_rating,
+                       COUNT(CASE WHEN r.stars = 5 THEN 1 END) AS five_star_count
+                FROM rating r
+                JOIN classifies_as ca ON r.book_id = ca.book_id
+                JOIN user_genres ug ON ca.genre_id = ug.genre_id
+                JOIN book b ON r.book_id = b.book_id
+                WHERE r.book_id NOT IN (SELECT book_id FROM user_books)
+                GROUP BY r.book_id, b.title
+                ORDER BY b.title, avg_rating DESC, five_star_count DESC
+            )
+            SELECT DISTINCT ON (tb.title) tb.title, 
+                   c.first_name AS author_first_name, 
+                   c.last_name AS author_last_name, 
+                   tb.avg_rating
+            FROM top_books tb
+            LEFT JOIN writes w ON tb.book_id = w.book_id
+            LEFT JOIN contributor c ON w.contributor_id = c.contributor_id
+            ORDER BY tb.title, tb.avg_rating DESC, tb.five_star_count DESC
+            LIMIT 10;
+            """
+
+            # Execute the query
+            self.cursor.execute(query, (user_id,))
+            recommendations = self.cursor.fetchall()
+
+            # Return the recommendations
+            return recommendations
+
+        except Exception as e:
+            print(f"An error occurred while generating recommendations: {e}")
+            self.connection.rollback()
+            return None
+
