@@ -809,26 +809,31 @@ class Connection:
                 LIMIT 2
             ),
             top_books AS (
-                SELECT DISTINCT ON (b.title) r.book_id,
-                       b.title,
+                SELECT r.book_id,
                        AVG(r.stars) AS avg_rating,
                        COUNT(CASE WHEN r.stars = 5 THEN 1 END) AS five_star_count
                 FROM rating r
                 JOIN classifies_as ca ON r.book_id = ca.book_id
                 JOIN user_genres ug ON ca.genre_id = ug.genre_id
-                JOIN book b ON r.book_id = b.book_id
                 WHERE r.book_id NOT IN (SELECT book_id FROM user_books)
-                GROUP BY r.book_id, b.title
-                ORDER BY b.title, avg_rating DESC, five_star_count DESC
+                GROUP BY r.book_id
+            ),
+            ranked_books AS (
+                SELECT DISTINCT ON (b.title) 
+                       b.title,
+                       c.first_name AS author_first_name,
+                       c.last_name AS author_last_name,
+                       tb.avg_rating,
+                       tb.five_star_count
+                FROM top_books tb
+                JOIN book b ON tb.book_id = b.book_id
+                LEFT JOIN writes w ON b.book_id = w.book_id
+                LEFT JOIN contributor c ON w.contributor_id = c.contributor_id
+                ORDER BY b.title, tb.avg_rating DESC, tb.five_star_count DESC
             )
-            SELECT DISTINCT ON (tb.title) tb.title, 
-                   c.first_name AS author_first_name, 
-                   c.last_name AS author_last_name, 
-                   tb.avg_rating
-            FROM top_books tb
-            LEFT JOIN writes w ON tb.book_id = w.book_id
-            LEFT JOIN contributor c ON w.contributor_id = c.contributor_id
-            ORDER BY tb.title, tb.avg_rating DESC, tb.five_star_count DESC
+            SELECT title, author_first_name, author_last_name, avg_rating
+            FROM ranked_books
+            ORDER BY avg_rating DESC, five_star_count DESC
             LIMIT 10;
             """
 
@@ -843,4 +848,6 @@ class Connection:
             print(f"An error occurred while generating recommendations: {e}")
             self.connection.rollback()
             return None
+
+
 
